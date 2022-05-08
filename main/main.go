@@ -99,8 +99,28 @@ func (h *superHeroHandler) get(w http.ResponseWriter, r *http.Request){
 }
 // ADD HERO -- /heros -- POST
 func (h *superHeroHandler) create(w http.ResponseWriter, r *http.Request){
+	// get hero json data from request to object
+	decoder := json.NewDecoder(r.Body)
+	var newHero superhero
+	er := decoder.Decode(&newHero)
+	if(er != nil){
+		// return server error
+		internalServerError(w,r)
+		return
+	}
+	// add hero to the map
+	h.store.RWMutex.Lock()
+	h.store.m[newHero.ID] = newHero
+	h.store.RWMutex.Unlock()
+	// return the hero object as json
+	heroJson, er := json.Marshal(newHero)
+	if(er != nil){
+		// return server error
+		internalServerError(w,r)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("temp todo create"))
+	w.Write(heroJson)
 }
 // DELETE HERO -- /heros/{id} -- DELETE
 func (h *superHeroHandler) delete(w http.ResponseWriter, r *http.Request){
