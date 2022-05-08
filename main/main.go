@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"regexp"
@@ -49,15 +50,29 @@ func (h *superHeroHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.update(w,r)
 		return
 	default:
-		// TODO not found method
+		notFound(w,r)
 		return
 	}
 }
 
 // GET HEROS -- /heros -- GET
 func (h *superHeroHandler) list(w http.ResponseWriter, r *http.Request){
+	// convert map to slice
+	h.store.RLock()
+	heros := make([]superhero,0,len(h.store.m))
+	for _,hero := range h.store.m{
+		heros = append(heros, hero)
+	}
+	h.store.RUnlock()
+	// convert slice to json and return it
+	herosJson, er := json.Marshal(heros)
+	if(er != nil){
+		// return server error
+		internalServerError(w,r)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("temp todo list"))
+	w.Write(herosJson)
 }
 // GET HERO -- /heros/{id} -- GET
 func (h *superHeroHandler) get(w http.ResponseWriter, r *http.Request){
@@ -80,6 +95,16 @@ func (h *superHeroHandler) update(w http.ResponseWriter, r *http.Request){
 	w.Write([]byte("temp todo update"))
 }
 
+func internalServerError(w http.ResponseWriter, r *http.Request){
+	w.WriteHeader(http.StatusInternalServerError)
+	w.Write([]byte(`{"error":"internal server error"}`))
+}
+
+func notFound(w http.ResponseWriter, r *http.Request){
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte(`{"error":"not found"}`))
+}
+
 func main(){
 	mux := http.NewServeMux()
 	superHeroH := &superHeroHandler{
@@ -87,6 +112,7 @@ func main(){
 			m : map[string]superhero{
 				"1":{ID: "1",Name: "SuperMan",FirstName: "Clark Joseph",LastName: "Kent",Place: "Smallville"},
 			},
+			RWMutex: &sync.RWMutex{},
 		},
 	}
 	mux.Handle("/heros", superHeroH)
