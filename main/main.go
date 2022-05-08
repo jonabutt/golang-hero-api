@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 )
 
@@ -76,8 +77,25 @@ func (h *superHeroHandler) list(w http.ResponseWriter, r *http.Request){
 }
 // GET HERO -- /heros/{id} -- GET
 func (h *superHeroHandler) get(w http.ResponseWriter, r *http.Request){
+	// get id from request
+	id := strings.TrimPrefix(r.URL.Path, "/heros/")
+	// get hero object from map
+	h.store.RLock()
+	hero, ok := h.store.m[id];
+	h.store.RUnlock()
+	if !ok {
+		notFound(w,r)
+		return
+	}
+	// change hero object to json bytes
+	heroJson, er := json.Marshal(hero)
+	if(er != nil){
+		// return server error
+		internalServerError(w,r)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("temp todo get"))
+	w.Write(heroJson)
 }
 // ADD HERO -- /heros -- POST
 func (h *superHeroHandler) create(w http.ResponseWriter, r *http.Request){
