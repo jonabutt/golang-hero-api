@@ -124,8 +124,13 @@ func (h *superHeroHandler) create(w http.ResponseWriter, r *http.Request){
 }
 // DELETE HERO -- /heros/{id} -- DELETE
 func (h *superHeroHandler) delete(w http.ResponseWriter, r *http.Request){
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("temp todo delete"))
+	// get id from request
+	id := strings.TrimPrefix(r.URL.Path, "/heros/")
+	// delete hero from map
+	h.store.RWMutex.Lock()
+	delete(h.store.m, id)
+	h.store.RWMutex.Unlock()	
+	w.WriteHeader(http.StatusNoContent)
 }
 // UPDATE HERO -- /heros -- PUT
 func (h *superHeroHandler) update(w http.ResponseWriter, r *http.Request){
