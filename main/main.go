@@ -134,8 +134,37 @@ func (h *superHeroHandler) delete(w http.ResponseWriter, r *http.Request){
 }
 // UPDATE HERO -- /heros -- PUT
 func (h *superHeroHandler) update(w http.ResponseWriter, r *http.Request){
+	// get hero json data from request to object
+	decoder := json.NewDecoder(r.Body)
+	var updatedHero superhero
+	er := decoder.Decode(&updatedHero)
+	if(er != nil){
+		// return server error
+		internalServerError(w,r)
+		return
+	}
+	// get hero from map
+	h.store.RWMutex.RLock()
+	_, ok  := h.store.m[updatedHero.ID]
+	h.store.RWMutex.RUnlock()
+	// if there is no hero return not found
+	if(!ok){
+		notFound(w,r)
+		return
+	}
+	// update hero
+	h.store.RWMutex.Lock()
+	h.store.m[updatedHero.ID] = updatedHero
+	h.store.RWMutex.Unlock()
+	// return updated hero as json
+	heroJson, er := json.Marshal(updatedHero)
+	if(er != nil){
+		// return server error
+		internalServerError(w,r)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("temp todo update"))
+	w.Write(heroJson)
 }
 
 func internalServerError(w http.ResponseWriter, r *http.Request){
