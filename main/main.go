@@ -7,6 +7,9 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/golang-jwt/jwt"
 )
 
 var (
@@ -30,6 +33,76 @@ type datastore struct {
 
 type superHeroHandler struct {
 	store *datastore
+}
+
+type credentials struct{
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type userClaims struct{
+	Username string `json:"username"`
+	jwt.StandardClaims
+}
+
+type authHandler struct {
+	key []byte
+}
+
+func validateCredentials(loginDetails *credentials) bool {
+	return loginDetails.Username == "admin" && loginDetails.Password == "secret"
+}
+
+func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type","application/json")
+	switch{
+	case r.Method == http.MethodPost:
+		h.auth(w,r)
+		return
+	default:
+		notFound(w,r)
+		return
+	}
+}
+
+// POST AUTH issue an JWT TOKEN 
+func (h *authHandler) auth(w http.ResponseWriter, r *http.Request){
+	// get json object
+	decoder := json.NewDecoder(r.Body)
+	var loginCred credentials
+	er := decoder.Decode(&loginCred)
+	if(er != nil){
+		// return server error
+		internalServerError(w,r)
+		return
+	}
+	// check username and password are valid
+	if(!validateCredentials(&loginCred)){
+		unAuthorized(w,r)
+		return
+	}
+	// generate jwt
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256,userClaims{
+		Username: loginCred.Username,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().AddDate(0,0,1).Unix(),
+			Issuer: "http://localhost:8081",
+		},
+	})
+	tkn,err := token.SignedString(h.key)
+	if(err != nil){
+		// return server error
+		internalServerError(w,r)
+		return
+	}
+	jwtJson, er := json.Marshal(struct{JWT string}{JWT: tkn})
+	if(er != nil){
+		// return server error
+		internalServerError(w,r)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(jwtJson)
 }
 
 func (h *superHeroHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +250,13 @@ func notFound(w http.ResponseWriter, r *http.Request){
 	w.Write([]byte(`{"error":"not found"}`))
 }
 
+func unAuthorized(w http.ResponseWriter, r *http.Request){
+	w.WriteHeader(http.StatusUnauthorized)
+	w.Write([]byte(`{"error":"unauthorized"}`))
+}
+
+var secretKey = []byte("")
+
 func main(){
 	mux := http.NewServeMux()
 	superHeroH := &superHeroHandler{
@@ -189,5 +269,10 @@ func main(){
 	}
 	mux.Handle("/heros", superHeroH)
 	mux.Handle("/heros/", superHeroH)
+	authH := &authHandler{
+		key: secretKey,
+	}
+	mux.Handle("/auth/",authH)
+	mux.Handle("/auth", authH)
 	log.Fatal(http.ListenAndServe(":8081",mux))
 }
