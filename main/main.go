@@ -32,6 +32,7 @@ type datastore struct {
 }
 
 type superHeroHandler struct {
+	key []byte
 	store *datastore
 }
 
@@ -172,6 +173,11 @@ func (h *superHeroHandler) get(w http.ResponseWriter, r *http.Request){
 }
 // ADD HERO -- /heros -- POST
 func (h *superHeroHandler) create(w http.ResponseWriter, r *http.Request){
+	// check jwt
+	if !authorizer(h.key)(w,r){
+		unAuthorized(w,r)
+		return
+	}
 	// get hero json data from request to object
 	decoder := json.NewDecoder(r.Body)
 	var newHero superhero
@@ -255,7 +261,36 @@ func unAuthorized(w http.ResponseWriter, r *http.Request){
 	w.Write([]byte(`{"error":"unauthorized"}`))
 }
 
-var secretKey = []byte("")
+func authorizer(key []byte) func(w http.ResponseWriter, r *http.Request) bool{
+	return func(w http.ResponseWriter, r *http.Request) bool{
+		// get bearer token from header
+		reqToken := r.Header.Get("Authorization")
+		splitToken := strings.Split(reqToken,"Bearer ")
+		if len(splitToken) !=2 {
+			return false
+		}		
+		// parse jwt token
+		token, err := jwt.ParseWithClaims(splitToken[1], &userClaims{}, func(token *jwt.Token) (interface{}, error) {
+			return key, nil
+		})
+		if (err != nil){
+			return false
+		}
+		// token to userClaims
+		claims, ok := token.Claims.(*userClaims)
+		if !ok{
+			return false
+		}
+		// check token is valid
+		if claimErr := claims.Valid(); claimErr != nil{
+			return false
+		}
+	
+		return true
+	}
+}
+
+var secretKey = []byte("ca3634ff22bbf52cd7f0b7c557997f25b7754f7bbfda6a0d6e8b4f332b797a6b")
 
 func main(){
 	mux := http.NewServeMux()
@@ -272,7 +307,6 @@ func main(){
 	authH := &authHandler{
 		key: secretKey,
 	}
-	mux.Handle("/auth/",authH)
 	mux.Handle("/auth", authH)
 	log.Fatal(http.ListenAndServe(":8081",mux))
 }
